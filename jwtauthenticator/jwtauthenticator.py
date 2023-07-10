@@ -95,7 +95,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
                 claims = self.verify_jwt_using_secret(token, secret, algorithms, audience)
                 log_text('claims from secret:' + str(claims))
             elif signing_certificate:
-                claims = self.verify_jwt_with_claims(token, signing_certificate, audience)
+                claims = self.verify_jwt_with_claims(token, signing_certificate, algorithms, audience)
                 log_text('claims from signing_certificate:' + str(claims))
             else:
                 log_text('auth_failed, no way to verify token')
@@ -104,6 +104,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
             return self.auth_failed(auth_url)
 
         username = self.retrieve_username(claims, username_claim_field, extract_username=extract_username)
+        log_text('username: '+str(username))
         user = await self.auth_to_user({'name': username})
         self.set_login_cookie(user)
 
@@ -116,12 +117,20 @@ class JSONWebTokenLoginHandler(BaseHandler):
             raise web.HTTPError(401)
 
     @staticmethod
-    def verify_jwt_with_claims(token, signing_certificate, audience):
+    def verify_jwt_with_claims(token, signing_certificate, algorithms, audience):
+        log_text('verify_jwt_with_claims: algorithms='+str(algorithms))
         opts = {}
         if not audience:
             opts = {"verify_aud": False}
         with open(signing_certificate, 'r') as rsa_public_key_file:
-            return jwt.decode(token, rsa_public_key_file.read(), audience=audience, options=opts)
+            log_text('found signing_certificate')
+            try:
+                dec = jwt.decode(token, rsa_public_key_file.read(), algorithms=algorithms, audience=audience, options=opts)
+                log_text('jwt = '+str(dec))
+                return dec
+            except Exception as e:
+                log_create()
+                raise e
 
     @staticmethod
     def verify_jwt_using_secret(json_web_token, secret, algorithms, audience):
