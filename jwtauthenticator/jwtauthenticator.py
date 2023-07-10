@@ -15,6 +15,26 @@ from traitlets import (
 from urllib import parse
 
 
+def print_exception():
+    import sys
+    import traceback
+    exc_type, exc_value, exc_tb = sys.exc_info()
+    except_string = traceback.format_exception(exc_type, exc_value, exc_tb)
+    print(except_string)
+    return except_string
+
+
+def log_create():
+    logr = open('app.log', 'a')
+    exceptions = print_exception()
+    logr.write(f"Failed to load: {str(exceptions)}\n")
+
+
+def log_text(text):
+    logr = open('app.log', 'a')
+    logr.write(f"Log: {str(text)}\n")
+
+
 class JSONWebTokenLoginHandler(BaseHandler):
     async def get(self):
         header_name = self.authenticator.header_name
@@ -24,6 +44,8 @@ class JSONWebTokenLoginHandler(BaseHandler):
         auth_header_content = self.request.headers.get(header_name, "") if header_name else None
         auth_cookie_content = self.get_cookie(cookie_name, "") if cookie_name else None
         auth_param_content = self.get_argument(param_name, default="") if param_name else None
+        log_text('param_name:"' + str(param_name) + '"')
+        log_text('auth_param_content:' + str(auth_param_content))
 
         signing_certificate = self.authenticator.signing_certificate
         secret = self.authenticator.secret
@@ -44,6 +66,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
                 auth_param_content = parse.parse_qs(parse.urlparse(next_url).query).get(param_name, "")
                 if isinstance(auth_param_content, list):
                     auth_param_content = auth_param_content[0]
+                log_text('auth_param_content:' + str(auth_param_content))
 
         if auth_url and retpath_param:
             auth_url += ("{prefix}{param}=https://{host}{url}".format(
@@ -67,8 +90,10 @@ class JSONWebTokenLoginHandler(BaseHandler):
         try:
             if secret:
                 claims = self.verify_jwt_using_secret(token, secret, algorithms, audience)
+                log_text('claims:' + str(claims))
             elif signing_certificate:
                 claims = self.verify_jwt_with_claims(token, signing_certificate, audience)
+                log_text('claims:' + str(claims))
             else:
                 return self.auth_failed(auth_url)
         except jwt.exceptions.InvalidTokenError:
