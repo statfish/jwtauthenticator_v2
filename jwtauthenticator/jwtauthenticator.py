@@ -15,27 +15,30 @@ from traitlets import (
 from urllib import parse
 
 
-def print_exception():
-    import sys
-    import traceback
-    exc_type, exc_value, exc_tb = sys.exc_info()
-    except_string = traceback.format_exception(exc_type, exc_value, exc_tb)
-    print(except_string)
-    return except_string
-
-
-def log_create():
-    logr = open('app.log', 'a')
-    exceptions = print_exception()
-    logr.write(f"Failed to load: {str(exceptions)}\n")
-
-
-def log_text(text):
-    logr = open('app.log', 'a')
-    logr.write(f"Log: {str(text)}\n")
-
-
 class JSONWebTokenLoginHandler(BaseHandler):
+
+    @staticmethod
+    def print_exception():
+        import sys
+        import traceback
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        except_string = traceback.format_exception(exc_type, exc_value, exc_tb)
+        print(except_string)
+        return except_string
+
+    def log_create(self):
+        if not self.authenticator.debug:
+            return
+        logr = open('app.log', 'a')
+        exceptions = print_exception()
+        logr.write(f"Failed to load: {str(exceptions)}\n")
+
+    def log_text(self, text):
+        if not self.authenticator.debug:
+            return
+        logr = open('app.log', 'a')
+        logr.write(f"Log: {str(text)}\n")
+
     async def get(self):
         header_name = self.authenticator.header_name
         cookie_name = self.authenticator.cookie_name
@@ -44,8 +47,8 @@ class JSONWebTokenLoginHandler(BaseHandler):
         auth_header_content = self.request.headers.get(header_name, "") if header_name else None
         auth_cookie_content = self.get_cookie(cookie_name, "") if cookie_name else None
         auth_param_content = self.get_argument(param_name, default="") if param_name else None
-        log_text('param_name:"' + str(param_name) + '"')
-        log_text('auth_param_content:' + str(auth_param_content))
+        self.log_text('param_name:"' + str(param_name) + '"')
+        self.log_text('auth_param_content:' + str(auth_param_content))
 
         signing_certificate = self.authenticator.signing_certificate
         secret = self.authenticator.secret
@@ -66,7 +69,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
                 auth_param_content = parse.parse_qs(parse.urlparse(next_url).query).get(param_name, "")
                 if isinstance(auth_param_content, list):
                     auth_param_content = auth_param_content[0]
-                log_text('auth_param_content:' + str(auth_param_content))
+                self.log_text('auth_param_content:' + str(auth_param_content))
 
         if auth_url and retpath_param:
             auth_url += ("{prefix}{param}=https://{host}{url}".format(
@@ -77,7 +80,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
             ))
 
         if bool(auth_header_content) + bool(auth_cookie_content) + bool(auth_param_content) > 1:
-            log_text('auth_failed, multiple tokens')
+            self.log_text('auth_failed, multiple tokens')
             raise web.HTTPError(400)
         elif auth_header_content:
             token = auth_header_content
@@ -85,26 +88,26 @@ class JSONWebTokenLoginHandler(BaseHandler):
             token = auth_cookie_content
         elif auth_param_content:
             token = auth_param_content
-            log_text('token:' + str(token))
+            self.log_text('token:' + str(token))
         else:
-            log_text('auth_failed, no token')
+            self.log_text('auth_failed, no token')
             return self.auth_failed(auth_url)
 
         try:
             if secret:
                 claims = self.verify_jwt_using_secret(token, secret, algorithms, audience)
-                log_text('claims from secret:' + str(claims))
+                self.log_text('claims from secret:' + str(claims))
             elif signing_certificate:
                 claims = self.verify_jwt_with_claims(token, signing_certificate, algorithms, audience)
-                log_text('claims from signing_certificate:' + str(claims))
+                self.log_text('claims from signing_certificate:' + str(claims))
             else:
-                log_text('auth_failed, no way to verify token')
+                self.log_text('auth_failed, no way to verify token')
                 return self.auth_failed(auth_url)
         except jwt.exceptions.InvalidTokenError:
             return self.auth_failed(auth_url)
 
         username = self.retrieve_username(claims, username_claim_field, extract_username=extract_username)
-        log_text('username: '+str(username))
+        self.log_text('username: ' + str(username))
         user = await self.auth_to_user({'name': username})
         self.set_login_cookie(user)
 
@@ -116,20 +119,20 @@ class JSONWebTokenLoginHandler(BaseHandler):
         else:
             raise web.HTTPError(401)
 
-    @staticmethod
-    def verify_jwt_with_claims(token, signing_certificate, algorithms, audience):
-        log_text('verify_jwt_with_claims: algorithms='+str(algorithms))
+    def verify_jwt_with_claims(self, token, signing_certificate, algorithms, audience):
+        self.log_text('verify_jwt_with_claims: algorithms=' + str(algorithms))
         opts = {}
         if not audience:
             opts = {"verify_aud": False}
         with open(signing_certificate, 'r') as rsa_public_key_file:
-            log_text('found signing_certificate')
+            self.log_text('found signing_certificate')
             try:
-                dec = jwt.decode(token, rsa_public_key_file.read(), algorithms=algorithms, audience=audience, options=opts)
-                log_text('jwt = '+str(dec))
+                dec = jwt.decode(token, rsa_public_key_file.read(), algorithms=algorithms, audience=audience,
+                                 options=opts)
+                self.log_text('jwt = ' + str(dec))
                 return dec
             except Exception as e:
-                log_create()
+                self.log_create()
                 raise e
 
     @staticmethod
@@ -211,6 +214,12 @@ class JSONWebTokenAuthenticator(Authenticator):
         default_value='',
         config=True,
         help="""HTTP header to inspect for the authenticated JSON Web Token."""
+    )
+
+    debug = Bool(
+        default_value=False,
+        config=True,
+        help="""Create a debug log on the server for troubleshooting"""
     )
 
     def get_handlers(self, app):
