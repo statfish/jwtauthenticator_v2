@@ -77,6 +77,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
             ))
 
         if bool(auth_header_content) + bool(auth_cookie_content) + bool(auth_param_content) > 1:
+            log_text('auth_failed, multiple tokens')
             raise web.HTTPError(400)
         elif auth_header_content:
             token = auth_header_content
@@ -84,17 +85,20 @@ class JSONWebTokenLoginHandler(BaseHandler):
             token = auth_cookie_content
         elif auth_param_content:
             token = auth_param_content
+            log_text('token:' + str(token))
         else:
+            log_text('auth_failed, no token')
             return self.auth_failed(auth_url)
 
         try:
             if secret:
                 claims = self.verify_jwt_using_secret(token, secret, algorithms, audience)
-                log_text('claims:' + str(claims))
+                log_text('claims from secret:' + str(claims))
             elif signing_certificate:
                 claims = self.verify_jwt_with_claims(token, signing_certificate, audience)
-                log_text('claims:' + str(claims))
+                log_text('claims from signing_certificate:' + str(claims))
             else:
+                log_text('auth_failed, no way to verify token')
                 return self.auth_failed(auth_url)
         except jwt.exceptions.InvalidTokenError:
             return self.auth_failed(auth_url)
