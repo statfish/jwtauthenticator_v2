@@ -231,6 +231,10 @@ class JSONWebTokenAuthenticator(Authenticator):
     def authenticate(self, *args):
         raise NotImplementedError()
 
+    # FIXME uncommenting this breaks authentication
+    # async def refresh_user(self, user, handler=None):
+    #     self.log_text("REFRESH_USER called")
+
 
 class JSONWebTokenLocalAuthenticator(JSONWebTokenAuthenticator, LocalAuthenticator):
     """
