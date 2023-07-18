@@ -233,8 +233,11 @@ class JSONWebTokenAuthenticator(Authenticator):
         raise NotImplementedError()
 
     async def refresh_user(self, user, handler=None):
+        # TODO implement callback to check if user is still authenticated
+        # by username?
         self.log_text("REFRESH_USER called")
-        # auth_state = await user.get_auth_state()
+        auth_state = await user.get_auth_state()
+        self.log_text(str(auth_state))
         # self.log_text(str(user))
         # self.log_text(str(auth_state))
         return True
